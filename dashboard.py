@@ -1,16 +1,14 @@
 import streamlit as st
-import cv2
-import time
 import base64
-import numpy as np
+import random
+import time
 import urllib.request
 from pathlib import Path
-from vehicle_detection import VehicleDetector
-from decision_engine import DecisionEngine
-from traffic_predictor import TrafficPredictor
 from prediction_graph import build_chart
 from emergency import check_emergency
 from ai_assistant import get_ai_tip
+from decision_engine import DecisionEngine
+from traffic_predictor import TrafficPredictor
 
 # ── Download demo video if not present ────────────────────────────────────────
 VIDEO_PATH = Path("traffic.mp4")
@@ -40,19 +38,18 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap');
 
-/* ── Root palette ── */
 :root {
-    --bg:        #020b18;
-    --surface:   #041428;
-    --card:      #071e36;
-    --border:    #0d3a5c;
-    --cyan:      #00d4ff;
-    --blue:      #0077ff;
-    --green:     #00ff88;
-    --orange:    #ff8c00;
-    --red:       #ff3b5c;
-    --text:      #cce8ff;
-    --muted:     #4a7fa5;
+    --bg:      #020b18;
+    --surface: #041428;
+    --card:    #071e36;
+    --border:  #0d3a5c;
+    --cyan:    #00d4ff;
+    --blue:    #0077ff;
+    --green:   #00ff88;
+    --orange:  #ff8c00;
+    --red:     #ff3b5c;
+    --text:    #cce8ff;
+    --muted:   #4a7fa5;
 }
 
 html, body, [data-testid="stAppViewContainer"] {
@@ -61,7 +58,6 @@ html, body, [data-testid="stAppViewContainer"] {
     font-family: 'Inter', sans-serif;
 }
 
-/* Animated grid background */
 [data-testid="stAppViewContainer"]::before {
     content: '';
     position: fixed;
@@ -79,11 +75,9 @@ html, body, [data-testid="stAppViewContainer"] {
     border-right: 1px solid var(--border) !important;
 }
 
-/* Hide default header */
 [data-testid="stHeader"] { background: transparent !important; }
 #MainMenu, footer { visibility: hidden; }
 
-/* ── Cards ── */
 .aura-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -105,7 +99,6 @@ html, body, [data-testid="stAppViewContainer"] {
     background: linear-gradient(90deg, var(--cyan), var(--blue));
 }
 
-/* ── Metric cards ── */
 .metric-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -130,20 +123,19 @@ html, body, [data-testid="stAppViewContainer"] {
     margin: 4px 0;
 }
 .metric-card .sub { font-size: .78rem; color: var(--muted); }
-.cyan  { color: var(--cyan)   !important; }
-.green { color: var(--green)  !important; }
-.orange{ color: var(--orange) !important; }
-.red   { color: var(--red)    !important; }
-.blue  { color: var(--blue)   !important; }
 
-/* Glow pulse on value */
 @keyframes glow {
     0%,100% { text-shadow: 0 0 8px currentColor; }
     50%      { text-shadow: 0 0 22px currentColor, 0 0 40px currentColor; }
 }
 .metric-card .value { animation: glow 3s ease-in-out infinite; }
 
-/* ── Status badge ── */
+.cyan   { color: var(--cyan)   !important; }
+.green  { color: var(--green)  !important; }
+.orange { color: var(--orange) !important; }
+.red    { color: var(--red)    !important; }
+.blue   { color: var(--blue)   !important; }
+
 .badge {
     display: inline-block;
     padding: 3px 12px;
@@ -158,7 +150,6 @@ html, body, [data-testid="stAppViewContainer"] {
 .badge-red    { background: rgba(255,59,92,.12);  color: var(--red);    border: 1px solid var(--red); }
 .badge-cyan   { background: rgba(0,212,255,.12);  color: var(--cyan);   border: 1px solid var(--cyan); }
 
-/* ── Section title ── */
 .section-title {
     font-family: 'Orbitron', sans-serif;
     font-size: .8rem;
@@ -177,7 +168,6 @@ html, body, [data-testid="stAppViewContainer"] {
     background: linear-gradient(90deg, var(--border), transparent);
 }
 
-/* ── Alert box ── */
 .alert-box {
     background: rgba(255,59,92,.08);
     border: 1px solid var(--red);
@@ -193,7 +183,6 @@ html, body, [data-testid="stAppViewContainer"] {
     border-color: var(--cyan);
 }
 
-/* ── AI tip ── */
 .ai-tip {
     background: linear-gradient(135deg, rgba(0,119,255,.08), rgba(0,212,255,.06));
     border: 1px solid var(--blue);
@@ -203,7 +192,6 @@ html, body, [data-testid="stAppViewContainer"] {
     line-height: 1.6;
 }
 
-/* ── Sidebar nav buttons ── */
 div[data-testid="stSidebar"] .stButton > button {
     width: 100%;
     background: transparent;
@@ -216,16 +204,13 @@ div[data-testid="stSidebar"] .stButton > button {
     padding: 10px 14px;
     margin-bottom: 4px;
     transition: all .2s;
-    cursor: pointer;
 }
 div[data-testid="stSidebar"] .stButton > button:hover {
     background: rgba(0,212,255,.08);
     color: #00d4ff;
     border-color: rgba(0,212,255,.3);
 }
-div[data-testid="stSidebar"] .stButton > button:focus {
-    box-shadow: none;
-}
+div[data-testid="stSidebar"] .stButton > button:focus { box-shadow: none; }
 .nav-active > button {
     background: rgba(0,212,255,.12) !important;
     color: #00d4ff !important;
@@ -234,30 +219,6 @@ div[data-testid="stSidebar"] .stButton > button:focus {
     font-weight: 600;
 }
 
-/* ── Live feed frame ── */
-.feed-container {
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-    position: relative;
-}
-.feed-overlay {
-    position: absolute;
-    top: 10px; left: 10px;
-    display: flex; gap: 6px;
-}
-.feed-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--red);
-    animation: pulse 1.2s ease-in-out infinite;
-}
-@keyframes pulse {
-    0%,100% { opacity: 1; transform: scale(1); }
-    50%      { opacity: .4; transform: scale(.7); }
-}
-
-/* Streamlit overrides */
 [data-testid="stMetric"] { display: none; }
 div[data-testid="column"] > div { gap: 0 !important; }
 .stPlotlyChart { border-radius: 14px; overflow: hidden; }
@@ -272,12 +233,17 @@ def logo_b64():
         return base64.b64encode(p.read_bytes()).decode()
     return None
 
-def congestion_color(level: str) -> str:
+def video_b64():
+    if VIDEO_PATH.exists():
+        return base64.b64encode(VIDEO_PATH.read_bytes()).decode()
+    return None
+
+def congestion_color(level):
     return {"Low": "green", "Medium": "orange", "High": "red"}.get(level, "cyan")
 
-def signal_color(decision: str) -> str:
-    if "Green" in decision:  return "green"
-    if "Red"   in decision:  return "red"
+def signal_color(decision):
+    if "Green" in decision: return "green"
+    if "Red"   in decision: return "red"
     return "orange"
 
 
@@ -301,14 +267,8 @@ with st.sidebar:
     if "page" not in st.session_state:
         st.session_state.page = "Live Dashboard"
 
-    nav_items = [
-        ("Live Dashboard",),
-        ("Analytics",),
-        ("Emergency",),
-        ("AI Assistant",),
-    ]
     st.markdown('<div style="margin-bottom:8px;font-family:Orbitron,sans-serif;font-size:.65rem;letter-spacing:.18em;color:#4a7fa5">NAVIGATION</div>', unsafe_allow_html=True)
-    for (label,) in nav_items:
+    for label in ["Live Dashboard", "Analytics", "Emergency", "AI Assistant"]:
         is_active = st.session_state.page == label
         if is_active:
             st.markdown('<div class="nav-active">', unsafe_allow_html=True)
@@ -322,7 +282,6 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color:#0d3a5c;margin:16px 0'/>", unsafe_allow_html=True)
     st.markdown('<div class="section-title">System Status</div>', unsafe_allow_html=True)
-
     col_a, col_b = st.columns(2)
     col_a.markdown('<div style="font-size:.75rem;color:#4a7fa5">AI Engine</div>'
                    '<span class="badge badge-green">ONLINE</span>', unsafe_allow_html=True)
@@ -330,7 +289,6 @@ with st.sidebar:
                    '<span class="badge badge-cyan">ACTIVE</span>', unsafe_allow_html=True)
 
     st.markdown("<br/>", unsafe_allow_html=True)
-    video_src = str(VIDEO_PATH)
     run = st.toggle("Start Live Feed", value=False)
 
 
@@ -354,124 +312,106 @@ st.markdown(
 # ══════════════════════════════════════════════════════════════════════════════
 if "Live Dashboard" in page:
 
-    detector  = VehicleDetector()
     engine    = DecisionEngine()
     predictor = TrafficPredictor()
 
-    # ── Metric placeholders ────────────────────────────────────────────────────
+    if "history" not in st.session_state:
+        st.session_state.history = [10, 12, 14, 18, 20]
+    if "vehicle_count" not in st.session_state:
+        st.session_state.vehicle_count = 14
+
+    if run:
+        st.session_state.vehicle_count = max(0, min(50,
+            st.session_state.vehicle_count + random.randint(-2, 3)))
+        st.session_state.history.append(st.session_state.vehicle_count)
+        if len(st.session_state.history) > 30:
+            st.session_state.history.pop(0)
+
+    vehicles   = st.session_state.vehicle_count
+    history    = st.session_state.history
+    congestion = engine.analyze(vehicles)
+    decision   = engine.signal_decision(congestion)
+    prediction = predictor.predict(history)
+    cc = congestion_color(congestion)
+    sc = signal_color(decision)
+
+    # ── Metric cards ───────────────────────────────────────────────────────────
     m1, m2, m3, m4 = st.columns(4)
-    metric_slots = [m1.empty(), m2.empty(), m3.empty(), m4.empty()]
+    for col, label, value, sub, color in [
+        (m1, "Vehicles Detected", str(vehicles),           "active now", "cyan"),
+        (m2, "Congestion Level",  congestion,               "real-time",  cc),
+        (m3, "Signal Decision",   decision,                 "AI control", sc),
+        (m4, "Next Prediction",   str(prediction)+" veh",  "forecast",   "blue"),
+    ]:
+        col.markdown(
+            f'<div class="metric-card">'
+            f'<div class="label">{label}</div>'
+            f'<div class="value {color}">{value}</div>'
+            f'<div class="sub">{sub}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-    # ── Feed + chart row ───────────────────────────────────────────────────────
+    # ── Feed + chart ───────────────────────────────────────────────────────────
     feed_col, chart_col = st.columns([3, 2], gap="medium")
-    feed_slot  = feed_col.empty()
-    chart_slot = chart_col.empty()
 
-    # ── Alert + tip row ────────────────────────────────────────────────────────
-    alert_col, tip_col = st.columns([1, 1], gap="medium")
-    alert_slot = alert_col.empty()
-    tip_slot   = tip_col.empty()
-
-    history = [10, 12, 14, 18, 20]
-    if "chart_counter" not in st.session_state:
-        st.session_state.chart_counter = 0
-
-    def render_metrics(vehicles, congestion, decision, prediction):
-        cc = congestion_color(congestion)
-        sc = signal_color(decision)
-        cards = [
-            ("Vehicles Detected", str(vehicles), "active now", "cyan"),
-            ("Congestion Level",  congestion,     "real-time",  cc),
-            ("Signal Decision",   decision,       "AI control", sc),
-            ("Next Prediction",   str(prediction)+" veh", "forecast", "blue"),
-        ]
-        for slot, (label, value, sub, color) in zip(metric_slots, cards):
-            slot.markdown(
-                f'<div class="metric-card">'
-                f'<div class="label">{label}</div>'
-                f'<div class="value {color}">{value}</div>'
-                f'<div class="sub">{sub}</div>'
-                f'</div>',
+    with feed_col:
+        st.markdown('<div class="section-title">Live Camera Feed</div>', unsafe_allow_html=True)
+        if run:
+            vid = video_b64()
+            if vid:
+                st.markdown(
+                    f'<video autoplay loop muted playsinline '
+                    f'style="width:100%;border-radius:12px;border:1px solid #0d3a5c">'
+                    f'<source src="data:video/mp4;base64,{vid}" type="video/mp4">'
+                    f'</video>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.warning("Demo video not found.")
+        else:
+            st.markdown(
+                '<div style="background:#041428;border:1px solid #0d3a5c;border-radius:12px;'
+                'height:260px;display:flex;align-items:center;justify-content:center;'
+                'color:#4a7fa5;font-family:Orbitron,sans-serif;font-size:.75rem;'
+                'letter-spacing:.15em">FEED INACTIVE — TOGGLE TO START</div>',
                 unsafe_allow_html=True,
             )
 
-    def render_feed(frame):
-        feed_slot.markdown(
-            '<div class="section-title">Live Camera Feed</div>',
-            unsafe_allow_html=True,
-        )
-        feed_slot.image(frame, use_container_width=True)
-
-    def render_chart(history):
-        chart_slot.markdown(
-            '<div class="section-title">Vehicle Count Trend</div>',
-            unsafe_allow_html=True,
-        )
-        st.session_state.chart_counter += 1
-        chart_slot.plotly_chart(
+    with chart_col:
+        st.markdown('<div class="section-title">Vehicle Count Trend</div>', unsafe_allow_html=True)
+        st.plotly_chart(
             build_chart(history),
             use_container_width=True,
             config={"displayModeBar": False},
-            key=f"trend_chart_{st.session_state.chart_counter}",
+            key="trend_chart",
         )
 
-    def render_alert(congestion, vehicles):
-        alert = check_emergency(congestion, vehicles)
+    # ── Alert + tip ────────────────────────────────────────────────────────────
+    alert_col, tip_col = st.columns(2, gap="medium")
+    alert = check_emergency(congestion, vehicles)
+    with alert_col:
         if alert:
-            alert_slot.markdown(
+            st.markdown(
                 f'<div class="alert-box"><div><b>EMERGENCY ALERT</b><br/>{alert}</div></div>',
                 unsafe_allow_html=True,
             )
         else:
-            alert_slot.markdown(
+            st.markdown(
                 '<div class="alert-box info"><div><b>All Clear</b><br/>'
                 'No incidents detected. System operating normally.</div></div>',
                 unsafe_allow_html=True,
             )
-
-    def render_tip(congestion, vehicles):
-        tip = get_ai_tip(congestion, vehicles)
-        tip_slot.markdown(
+    with tip_col:
+        st.markdown(
             f'<div class="section-title">AI Recommendation</div>'
-            f'<div class="ai-tip">{tip}</div>',
+            f'<div class="ai-tip">{get_ai_tip(congestion, vehicles)}</div>',
             unsafe_allow_html=True,
         )
 
-    # ── Initial static render ──────────────────────────────────────────────────
-    render_metrics(0, "Low", "Green Light", 0)
-    render_chart(history)
-    render_alert("Low", 0)
-    render_tip("Low", 0)
-
-    # ── Live loop ──────────────────────────────────────────────────────────────
     if run:
-        cap = cv2.VideoCapture(video_src)
-        if not cap.isOpened():
-            st.error("No video source. Please upload a video file.")
-        else:
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-
-                frame, vehicle_count, _ = detector.detect(frame)
-                congestion  = engine.analyze(vehicle_count)
-                decision    = engine.signal_decision(congestion)
-                history.append(vehicle_count)
-                if len(history) > 30:
-                    history.pop(0)
-                prediction = predictor.predict(history)
-
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                render_feed(rgb)
-                render_metrics(vehicle_count, congestion, decision, prediction)
-                render_chart(history)
-                render_alert(congestion, vehicle_count)
-                render_tip(congestion, vehicle_count)
-                time.sleep(0.03)
-
-            cap.release()
+        time.sleep(1)
+        st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -482,21 +422,17 @@ elif "Analytics" in page:
 
     st.markdown('<div class="section-title">Traffic Analytics Overview</div>', unsafe_allow_html=True)
 
-    hours = list(range(24))
-    avg_vehicles = [5,3,2,2,3,8,18,32,28,22,20,24,26,23,21,25,30,35,28,20,15,12,9,6]
+    hours          = list(range(24))
+    avg_vehicles   = [5,3,2,2,3,8,18,32,28,22,20,24,26,23,21,25,30,35,28,20,15,12,9,6]
     congestion_pct = [10,5,3,3,5,15,45,80,70,55,50,60,65,58,52,62,75,88,70,50,38,30,22,15]
 
     col1, col2 = st.columns(2, gap="medium")
-
     with col1:
-        st.markdown('<div class="aura-card">', unsafe_allow_html=True)
         fig = go.Figure()
         fig.add_trace(go.Scatter(
-            x=hours, y=avg_vehicles,
-            fill='tozeroy',
+            x=hours, y=avg_vehicles, fill='tozeroy',
             line=dict(color='#00d4ff', width=2),
-            fillcolor='rgba(0,212,255,0.08)',
-            name='Avg Vehicles'
+            fillcolor='rgba(0,212,255,0.08)', name='Avg Vehicles'
         ))
         fig.update_layout(
             title=dict(text="Avg Vehicles per Hour", font=dict(color='#cce8ff', size=13)),
@@ -504,21 +440,16 @@ elif "Analytics" in page:
             font=dict(color='#4a7fa5'),
             xaxis=dict(gridcolor='#0d3a5c', title='Hour'),
             yaxis=dict(gridcolor='#0d3a5c', title='Vehicles'),
-            margin=dict(l=10, r=10, t=40, b=10),
-            height=260,
+            margin=dict(l=10, r=10, t=40, b=10), height=260,
         )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False}, key="analytics_vehicles")
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="aura-card">', unsafe_allow_html=True)
         fig2 = go.Figure()
         fig2.add_trace(go.Bar(
             x=hours, y=congestion_pct,
-            marker=dict(
-                color=congestion_pct,
-                colorscale=[[0,'#00ff88'],[0.5,'#ff8c00'],[1,'#ff3b5c']],
-            ),
+            marker=dict(color=congestion_pct,
+                        colorscale=[[0,'#00ff88'],[0.5,'#ff8c00'],[1,'#ff3b5c']]),
             name='Congestion %'
         ))
         fig2.update_layout(
@@ -527,22 +458,18 @@ elif "Analytics" in page:
             font=dict(color='#4a7fa5'),
             xaxis=dict(gridcolor='#0d3a5c', title='Hour'),
             yaxis=dict(gridcolor='#0d3a5c', title='%'),
-            margin=dict(l=10, r=10, t=40, b=10),
-            height=260,
+            margin=dict(l=10, r=10, t=40, b=10), height=260,
         )
         st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False}, key="analytics_congestion")
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    # Summary stats
     st.markdown('<div class="section-title">Key Metrics</div>', unsafe_allow_html=True)
     s1, s2, s3, s4 = st.columns(4)
-    stats = [
-        ("Peak Hour", "17:00", "cyan"),
-        ("Max Vehicles", "35", "blue"),
-        ("Avg Congestion", "42%", "orange"),
-        ("Incidents Today", "2", "red"),
-    ]
-    for col, (label, val, color) in zip([s1,s2,s3,s4], stats):
+    for col, label, val, color in [
+        (s1, "Peak Hour",       "17:00", "cyan"),
+        (s2, "Max Vehicles",    "35",    "blue"),
+        (s3, "Avg Congestion",  "42%",   "orange"),
+        (s4, "Incidents Today", "2",     "red"),
+    ]:
         col.markdown(
             f'<div class="metric-card">'
             f'<div class="label">{label}</div>'
@@ -559,18 +486,16 @@ elif "Emergency" in page:
     st.markdown('<div class="section-title">Emergency Management</div>', unsafe_allow_html=True)
 
     e1, e2, e3 = st.columns(3, gap="medium")
-    incidents = [
-        ("Fire Alert",  "Zone A - Main St",   "ACTIVE",     "red"),
-        ("Medical",     "Zone C - Park Ave",  "RESOLVED",   "green"),
-        ("Accident",    "Zone B - Highway 1", "MONITORING", "orange"),
-    ]
-    for col, (title, loc, status, color) in zip([e1,e2,e3], incidents):
-        badge_cls = f"badge-{color}"
+    for col, title, loc, status, color in [
+        (e1, "Fire Alert", "Zone A - Main St",   "ACTIVE",     "red"),
+        (e2, "Medical",    "Zone C - Park Ave",  "RESOLVED",   "green"),
+        (e3, "Accident",   "Zone B - Highway 1", "MONITORING", "orange"),
+    ]:
         col.markdown(
             f'<div class="aura-card">'
             f'<div style="font-family:Orbitron,sans-serif;font-size:.9rem;margin:8px 0 4px">{title}</div>'
             f'<div style="font-size:.8rem;color:#4a7fa5;margin-bottom:10px">{loc}</div>'
-            f'<span class="badge {badge_cls}">{status}</span>'
+            f'<span class="badge badge-{color}">{status}</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -581,10 +506,9 @@ elif "Emergency" in page:
         c1, c2 = st.columns(2)
         itype    = c1.selectbox("Incident Type", ["Fire", "Accident", "Medical", "Flood", "Other"])
         zone     = c2.selectbox("Zone", ["Zone A", "Zone B", "Zone C", "Zone D"])
-        desc     = st.text_area("Description", placeholder="Describe the incident...")
+        st.text_area("Description", placeholder="Describe the incident...")
         severity = st.select_slider("Severity", ["Low", "Medium", "High", "Critical"])
-        submitted = st.form_submit_button("Submit Incident Report")
-        if submitted:
+        if st.form_submit_button("Submit Incident Report"):
             st.markdown(
                 f'<div class="alert-box info"><div><b>Incident Reported</b><br/>'
                 f'{itype} in {zone} — Severity: {severity}</div></div>',
@@ -597,7 +521,6 @@ elif "Emergency" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 elif "AI Assistant" in page:
     st.markdown('<div class="section-title">AURA AI Assistant</div>', unsafe_allow_html=True)
-
     st.markdown(
         '<div class="aura-card" style="margin-bottom:20px">'
         '<div style="font-family:Orbitron,sans-serif;font-size:.85rem;color:#00d4ff;margin-bottom:8px">'
@@ -613,10 +536,10 @@ elif "AI Assistant" in page:
         st.session_state.chat_history = []
 
     for role, msg in st.session_state.chat_history:
-        align = "right" if role == "user" else "left"
-        bg    = "rgba(0,119,255,.12)" if role == "user" else "rgba(0,212,255,.06)"
-        border= "#0077ff" if role == "user" else "#00d4ff"
-        label = "You" if role == "user" else "AURA"
+        align  = "right" if role == "user" else "left"
+        bg     = "rgba(0,119,255,.12)" if role == "user" else "rgba(0,212,255,.06)"
+        border = "#0077ff" if role == "user" else "#00d4ff"
+        label  = "You" if role == "user" else "AURA"
         st.markdown(
             f'<div style="display:flex;justify-content:{align};margin-bottom:10px">'
             f'<div style="max-width:75%;background:{bg};border:1px solid {border};'
@@ -628,9 +551,7 @@ elif "AI Assistant" in page:
 
     with st.form("chat_form", clear_on_submit=True):
         user_input = st.text_input("", placeholder="Ask AURA something...", label_visibility="collapsed")
-        send = st.form_submit_button("Send")
-        if send and user_input.strip():
+        if st.form_submit_button("Send") and user_input.strip():
             st.session_state.chat_history.append(("user", user_input))
-            response = get_ai_tip("Medium", 20, query=user_input)
-            st.session_state.chat_history.append(("aura", response))
+            st.session_state.chat_history.append(("aura", get_ai_tip("Medium", 20, query=user_input)))
             st.rerun()
