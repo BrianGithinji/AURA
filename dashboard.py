@@ -373,6 +373,8 @@ if "Live Dashboard" in page:
     tip_slot   = tip_col.empty()
 
     history = [10, 12, 14, 18, 20]
+    if "chart_counter" not in st.session_state:
+        st.session_state.chart_counter = 0
 
     def render_metrics(vehicles, congestion, decision, prediction):
         cc = congestion_color(congestion)
@@ -405,10 +407,12 @@ if "Live Dashboard" in page:
             '<div class="section-title">Vehicle Count Trend</div>',
             unsafe_allow_html=True,
         )
+        st.session_state.chart_counter += 1
         chart_slot.plotly_chart(
             build_chart(history),
             use_container_width=True,
             config={"displayModeBar": False},
+            key=f"trend_chart_{st.session_state.chart_counter}",
         )
 
     def render_alert(congestion, vehicles):
@@ -503,7 +507,7 @@ elif "Analytics" in page:
             margin=dict(l=10, r=10, t=40, b=10),
             height=260,
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False}, key="analytics_vehicles")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
@@ -526,7 +530,7 @@ elif "Analytics" in page:
             margin=dict(l=10, r=10, t=40, b=10),
             height=260,
         )
-        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False}, key="analytics_congestion")
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Summary stats
