@@ -348,10 +348,14 @@ if "Live Dashboard" in page:
             unsafe_allow_html=True,
         )
 
+    if "chart_key" not in st.session_state:
+        st.session_state.chart_key = 0
+
     def render_chart_slot(h):
+        st.session_state.chart_key += 1
         chart_slot.markdown('<div class="section-title">Vehicle Count Trend</div>', unsafe_allow_html=True)
         chart_slot.plotly_chart(build_chart(h), use_container_width=True,
-                                config={"displayModeBar": False}, key="trend_chart")
+                                config={"displayModeBar": False}, key=f"trend_{st.session_state.chart_key}")
 
     def render_alert_tip(congestion, vehicles):
         alert = check_emergency(congestion, vehicles)
