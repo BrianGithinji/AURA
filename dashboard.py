@@ -270,7 +270,7 @@ with st.sidebar:
         st.session_state.page = "Live Dashboard"
 
     st.markdown('<div style="margin-bottom:8px;font-family:Orbitron,sans-serif;font-size:.65rem;letter-spacing:.18em;color:#4a7fa5">NAVIGATION</div>', unsafe_allow_html=True)
-    for label in ["Live Dashboard", "Analytics", "Emergency", "AI Assistant"]:
+    for label in ["Live Dashboard", "Analytics", "Route Map", "Emergency", "AI Assistant"]:
         is_active = st.session_state.page == label
         if is_active:
             st.markdown('<div class="nav-active">', unsafe_allow_html=True)
@@ -493,6 +493,183 @@ elif "Analytics" in page:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PAGE: ROUTE MAP
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Route Map" in page:
+    import plotly.graph_objects as go
+    import random
+
+    st.markdown('<div class="section-title">Emergency Route Intelligence</div>', unsafe_allow_html=True)
+
+    # ── Simulated city routes (lat/lon pairs) ────────────────────────────────────
+    # Centre: Nairobi CBD
+    CENTER = (-1.2921, 36.8219)
+
+    routes = [
+        {
+            "name": "Route A — Uhuru Highway",
+            "coords": [(-1.2921,36.8219),(-1.2950,36.8150),(-1.2980,36.8080),(-1.3010,36.8010)],
+            "congestion": "High",
+            "eta": "18 min",
+            "distance": "4.2 km",
+        },
+        {
+            "name": "Route B — Mombasa Road",
+            "coords": [(-1.2921,36.8219),(-1.3000,36.8300),(-1.3080,36.8380),(-1.3150,36.8450)],
+            "congestion": "Low",
+            "eta": "7 min",
+            "distance": "3.1 km",
+        },
+        {
+            "name": "Route C — Ngong Road",
+            "coords": [(-1.2921,36.8219),(-1.2860,36.8150),(-1.2800,36.8080),(-1.2740,36.8010)],
+            "congestion": "Medium",
+            "eta": "12 min",
+            "distance": "3.8 km",
+        },
+        {
+            "name": "Route D — Thika Road",
+            "coords": [(-1.2921,36.8219),(-1.2800,36.8300),(-1.2680,36.8380),(-1.2560,36.8450)],
+            "congestion": "Low",
+            "eta": "9 min",
+            "distance": "3.5 km",
+        },
+        {
+            "name": "Route E — Waiyaki Way",
+            "coords": [(-1.2921,36.8219),(-1.2880,36.8350),(-1.2840,36.8480),(-1.2800,36.8600)],
+            "congestion": "High",
+            "eta": "22 min",
+            "distance": "5.0 km",
+        },
+    ]
+
+    color_map = {"Low": "#00ff88", "Medium": "#ff8c00", "High": "#ff3b5c"}
+
+    # ── Best route highlight ─────────────────────────────────────────────────────────
+    low_routes  = [r for r in routes if r["congestion"] == "Low"]
+    best_route  = min(low_routes, key=lambda r: int(r["eta"].split()[0])) if low_routes else routes[0]
+
+    # ── Top summary cards ─────────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    for col, label, val, color in [
+        (c1, "Best Route",     best_route["name"].split(" — ")[1], "green"),
+        (c2, "ETA",            best_route["eta"],                   "cyan"),
+        (c3, "Distance",       best_route["distance"],              "blue"),
+        (c4, "Routes Blocked", str(sum(1 for r in routes if r["congestion"]=="High")), "red"),
+    ]:
+        col.markdown(
+            f'<div class="metric-card">'
+            f'<div class="label">{label}</div>'
+            f'<div class="value {color}">{val}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    map_col, info_col = st.columns([3, 1], gap="medium")
+
+    with map_col:
+        st.markdown('<div class="section-title">Live Route Congestion Map</div>', unsafe_allow_html=True)
+
+        fig = go.Figure()
+
+        for route in routes:
+            lats = [c[0] for c in route["coords"]]
+            lons = [c[1] for c in route["coords"]]
+            color = color_map[route["congestion"]]
+            is_best = route["name"] == best_route["name"]
+            fig.add_trace(go.Scattermapbox(
+                lat=lats, lon=lons,
+                mode="lines+markers",
+                line=dict(width=6 if is_best else 4, color=color),
+                marker=dict(size=8 if is_best else 5, color=color),
+                name=route["name"],
+                hovertemplate=(
+                    f"<b>{route['name']}</b><br>"
+                    f"Congestion: {route['congestion']}<br>"
+                    f"ETA: {route['eta']}<br>"
+                    f"Distance: {route['distance']}"
+                    "<extra></extra>"
+                ),
+            ))
+
+        # Origin marker
+        fig.add_trace(go.Scattermapbox(
+            lat=[CENTER[0]], lon=[CENTER[1]],
+            mode="markers+text",
+            marker=dict(size=16, color="#00d4ff", symbol="circle"),
+            text=["DISPATCH"], textposition="top right",
+            textfont=dict(color="#00d4ff", size=11),
+            name="Dispatch",
+            hovertemplate="<b>Dispatch Center</b><extra></extra>",
+        ))
+
+        # Best route pulse marker at destination
+        dest = best_route["coords"][-1]
+        fig.add_trace(go.Scattermapbox(
+            lat=[dest[0]], lon=[dest[1]],
+            mode="markers+text",
+            marker=dict(size=18, color="#00ff88", symbol="circle"),
+            text=["TARGET"], textposition="top right",
+            textfont=dict(color="#00ff88", size=11),
+            name="Target",
+            hovertemplate="<b>Incident Location</b><extra></extra>",
+        ))
+
+        fig.update_layout(
+            mapbox=dict(
+                style="carto-darkmatter",
+                center=dict(lat=CENTER[0], lon=CENTER[1]),
+                zoom=12,
+            ),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=0, b=0),
+            height=500,
+            legend=dict(
+                bgcolor="rgba(4,20,40,0.9)",
+                bordercolor="#0d3a5c",
+                borderwidth=1,
+                font=dict(color="#cce8ff", size=11),
+            ),
+            font=dict(color="#cce8ff"),
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False}, key="route_map")
+
+    with info_col:
+        st.markdown('<div class="section-title">Route Status</div>', unsafe_allow_html=True)
+        for route in routes:
+            color     = color_map[route["congestion"]]
+            badge_cls = f"badge-{route['congestion'].lower()}"
+            is_best   = route["name"] == best_route["name"]
+            border    = "#00ff88" if is_best else "#0d3a5c"
+            bg        = "rgba(0,255,136,.05)" if is_best else "rgba(7,30,54,1)"
+            st.markdown(
+                f'<div style="background:{bg};border:1px solid {border};border-radius:12px;'
+                f'padding:12px 14px;margin-bottom:10px">'
+                f'<div style="font-family:Orbitron,sans-serif;font-size:.72rem;color:#cce8ff;margin-bottom:6px">'
+                f'{"RECOMMENDED " if is_best else ""}{route["name"]}'
+                f'</div>'
+                f'<div style="display:flex;justify-content:space-between;align-items:center">'
+                f'<span class="badge {badge_cls}">{route["congestion"]}</span>'
+                f'<span style="font-size:.78rem;color:#4a7fa5">{route["eta"]} &bull; {route["distance"]}</span>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<br/>", unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Legend</div>', unsafe_allow_html=True)
+        for label, color in [("Low Congestion","#00ff88"),("Medium Congestion","#ff8c00"),("High Congestion","#ff3b5c")]:
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.82rem">'
+                f'<div style="width:28px;height:4px;background:{color};border-radius:2px"></div>'
+                f'<span style="color:#cce8ff">{label}</span></div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
