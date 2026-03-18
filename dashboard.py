@@ -395,6 +395,7 @@ if "Live Dashboard" in page:
         else:
             feed_slot.markdown('<div class="section-title">Live Camera Feed</div>', unsafe_allow_html=True)
             frame_slot = feed_slot.empty()
+            frame_idx  = 0
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
@@ -414,12 +415,17 @@ if "Live Dashboard" in page:
                 sc = signal_color(decision)
 
                 frame_slot.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
-                render_metric(slot_v, "Vehicles Detected", str(vehicle_count), "active now", "cyan")
-                render_metric(slot_c, "Congestion Level",  congestion, "real-time", cc)
-                render_metric(slot_d, "Signal Decision",   decision,   "AI control", sc)
-                render_metric(slot_p, "Next Prediction",   str(prediction)+" veh", "forecast", "blue")
-                render_chart_slot(history)
-                render_alert_tip(congestion, vehicle_count)
+
+                # Update metrics and chart every 10 frames only
+                if frame_idx % 10 == 0:
+                    render_metric(slot_v, "Vehicles Detected", str(vehicle_count), "active now", "cyan")
+                    render_metric(slot_c, "Congestion Level",  congestion, "real-time", cc)
+                    render_metric(slot_d, "Signal Decision",   decision,   "AI control", sc)
+                    render_metric(slot_p, "Next Prediction",   str(prediction)+" veh", "forecast", "blue")
+                    render_chart_slot(history)
+                    render_alert_tip(congestion, vehicle_count)
+
+                frame_idx += 1
 
             cap.release()
 
