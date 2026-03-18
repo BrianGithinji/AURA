@@ -435,12 +435,33 @@ if "Live Dashboard" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Analytics" in page:
     import plotly.graph_objects as go
+    import random
 
     st.markdown('<div class="section-title">Traffic Analytics Overview</div>', unsafe_allow_html=True)
 
-    hours          = list(range(24))
-    avg_vehicles   = [5,3,2,2,3,8,18,32,28,22,20,24,26,23,21,25,30,35,28,20,15,12,9,6]
-    congestion_pct = [10,5,3,3,5,15,45,80,70,55,50,60,65,58,52,62,75,88,70,50,38,30,22,15]
+    # ── Seed dynamic data from live session state ──────────────────────────────
+    live_count = st.session_state.history[-1] if "history" in st.session_state else 14
+
+    if "analytics_tick" not in st.session_state:
+        st.session_state.analytics_tick = 0
+    st.session_state.analytics_tick += 1
+    tick = st.session_state.analytics_tick
+
+    hours = list(range(24))
+
+    # Shift the hourly curve based on live count so it breathes with real traffic
+    base = [5,3,2,2,3,8,18,32,28,22,20,24,26,23,21,25,30,35,28,20,15,12,9,6]
+    avg_vehicles = [
+        max(0, v + int(live_count * 0.3) + random.randint(-2, 2))
+        for v in base
+    ]
+    congestion_pct = [
+        min(100, max(0, int(v / max(avg_vehicles) * 100) + random.randint(-3, 3)))
+        for v in avg_vehicles
+    ]
+
+    # Rolling 30-frame history sparkline
+    history = st.session_state.get("history", [14]*10)
 
     col1, col2 = st.columns(2, gap="medium")
     with col1:
@@ -458,7 +479,8 @@ elif "Analytics" in page:
             yaxis=dict(gridcolor='#0d3a5c', title='Vehicles'),
             margin=dict(l=10, r=10, t=40, b=10), height=260,
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False}, key="analytics_vehicles")
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False},
+                        key=f"analytics_vehicles_{tick}")
 
     with col2:
         fig2 = go.Figure()
@@ -476,15 +498,43 @@ elif "Analytics" in page:
             yaxis=dict(gridcolor='#0d3a5c', title='%'),
             margin=dict(l=10, r=10, t=40, b=10), height=260,
         )
-        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False}, key="analytics_congestion")
+        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False},
+                        key=f"analytics_congestion_{tick}")
+
+    # ── Live history sparkline ────────────────────────────────────────────────────────
+    st.markdown('<div class="section-title">Live Vehicle Count History</div>', unsafe_allow_html=True)
+    fig3 = go.Figure()
+    fig3.add_trace(go.Scatter(
+        x=list(range(len(history))), y=history,
+        mode='lines+markers',
+        line=dict(color='#0077ff', width=2, shape='spline'),
+        fill='tozeroy', fillcolor='rgba(0,119,255,0.07)',
+        marker=dict(size=5, color='#0077ff'),
+        name='Vehicle Count'
+    ))
+    fig3.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#4a7fa5'),
+        xaxis=dict(gridcolor='#0d3a5c', title='Frame'),
+        yaxis=dict(gridcolor='#0d3a5c', title='Vehicles'),
+        margin=dict(l=10, r=10, t=10, b=10), height=180,
+    )
+    st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False},
+                    key=f"live_history_{tick}")
+
+    # ── Dynamic summary stats ────────────────────────────────────────────────────────
+    peak_hour   = hours[avg_vehicles.index(max(avg_vehicles))]
+    max_veh     = max(avg_vehicles)
+    avg_cong    = int(sum(congestion_pct) / len(congestion_pct))
+    incidents   = sum(1 for v in history if v > 30)
 
     st.markdown('<div class="section-title">Key Metrics</div>', unsafe_allow_html=True)
     s1, s2, s3, s4 = st.columns(4)
     for col, label, val, color in [
-        (s1, "Peak Hour",       "17:00", "cyan"),
-        (s2, "Max Vehicles",    "35",    "blue"),
-        (s3, "Avg Congestion",  "42%",   "orange"),
-        (s4, "Incidents Today", "2",     "red"),
+        (s1, "Peak Hour",       f"{peak_hour:02d}:00", "cyan"),
+        (s2, "Max Vehicles",    str(max_veh),          "blue"),
+        (s3, "Avg Congestion",  f"{avg_cong}%",        "orange"),
+        (s4, "High Load Frames",str(incidents),        "red"),
     ]:
         col.markdown(
             f'<div class="metric-card">'
@@ -493,6 +543,9 @@ elif "Analytics" in page:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    time.sleep(3)
+    st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
