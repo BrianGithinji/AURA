@@ -1,7 +1,8 @@
 import streamlit as st
 import base64
-import random
 import time
+import cv2
+import numpy as np
 import urllib.request
 from pathlib import Path
 from prediction_graph import build_chart
@@ -9,6 +10,7 @@ from emergency import check_emergency
 from ai_assistant import get_ai_tip
 from decision_engine import DecisionEngine
 from traffic_predictor import TrafficPredictor
+from vehicle_detection import VehicleDetector
 
 # ── Download demo video if not present ────────────────────────────────────────
 VIDEO_PATH = Path("traffic.mp4")
@@ -314,36 +316,30 @@ if "Live Dashboard" in page:
 
     engine    = DecisionEngine()
     predictor = TrafficPredictor()
+    detector  = VehicleDetector()
 
     if "history" not in st.session_state:
         st.session_state.history = [10, 12, 14, 18, 20]
-    if "vehicle_count" not in st.session_state:
-        st.session_state.vehicle_count = 14
 
-    if run:
-        st.session_state.vehicle_count = max(0, min(50,
-            st.session_state.vehicle_count + random.randint(-2, 3)))
-        st.session_state.history.append(st.session_state.vehicle_count)
-        if len(st.session_state.history) > 30:
-            st.session_state.history.pop(0)
+    history = st.session_state.history
 
-    vehicles   = st.session_state.vehicle_count
-    history    = st.session_state.history
-    congestion = engine.analyze(vehicles)
-    decision   = engine.signal_decision(congestion)
-    prediction = predictor.predict(history)
-    cc = congestion_color(congestion)
-    sc = signal_color(decision)
-
-    # ── Metric cards ───────────────────────────────────────────────────────────
+    # ── Static metric placeholders (rendered once) ─────────────────────────────
     m1, m2, m3, m4 = st.columns(4)
-    for col, label, value, sub, color in [
-        (m1, "Vehicles Detected", str(vehicles),           "active now", "cyan"),
-        (m2, "Congestion Level",  congestion,               "real-time",  cc),
-        (m3, "Signal Decision",   decision,                 "AI control", sc),
-        (m4, "Next Prediction",   str(prediction)+" veh",  "forecast",   "blue"),
-    ]:
-        col.markdown(
+    slot_v  = m1.empty()
+    slot_c  = m2.empty()
+    slot_d  = m3.empty()
+    slot_p  = m4.empty()
+
+    feed_col, chart_col = st.columns([3, 2], gap="medium")
+    feed_slot  = feed_col.empty()
+    chart_slot = chart_col.empty()
+
+    alert_col, tip_col = st.columns(2, gap="medium")
+    alert_slot = alert_col.empty()
+    tip_slot   = tip_col.empty()
+
+    def render_metric(slot, label, value, sub, color):
+        slot.markdown(
             f'<div class="metric-card">'
             f'<div class="label">{label}</div>'
             f'<div class="value {color}">{value}</div>'
@@ -352,66 +348,76 @@ if "Live Dashboard" in page:
             unsafe_allow_html=True,
         )
 
-    # ── Feed + chart ───────────────────────────────────────────────────────────
-    feed_col, chart_col = st.columns([3, 2], gap="medium")
+    def render_chart_slot(h):
+        chart_slot.markdown('<div class="section-title">Vehicle Count Trend</div>', unsafe_allow_html=True)
+        chart_slot.plotly_chart(build_chart(h), use_container_width=True,
+                                config={"displayModeBar": False}, key="trend_chart")
 
-    with feed_col:
-        st.markdown('<div class="section-title">Live Camera Feed</div>', unsafe_allow_html=True)
-        if run:
-            vid = video_b64()
-            if vid:
-                st.markdown(
-                    f'<video autoplay loop muted playsinline '
-                    f'style="width:100%;border-radius:12px;border:1px solid #0d3a5c">'
-                    f'<source src="data:video/mp4;base64,{vid}" type="video/mp4">'
-                    f'</video>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.warning("Demo video not found.")
-        else:
-            st.markdown(
-                '<div style="background:#041428;border:1px solid #0d3a5c;border-radius:12px;'
-                'height:260px;display:flex;align-items:center;justify-content:center;'
-                'color:#4a7fa5;font-family:Orbitron,sans-serif;font-size:.75rem;'
-                'letter-spacing:.15em">FEED INACTIVE — TOGGLE TO START</div>',
-                unsafe_allow_html=True,
-            )
-
-    with chart_col:
-        st.markdown('<div class="section-title">Vehicle Count Trend</div>', unsafe_allow_html=True)
-        st.plotly_chart(
-            build_chart(history),
-            use_container_width=True,
-            config={"displayModeBar": False},
-            key="trend_chart",
-        )
-
-    # ── Alert + tip ────────────────────────────────────────────────────────────
-    alert_col, tip_col = st.columns(2, gap="medium")
-    alert = check_emergency(congestion, vehicles)
-    with alert_col:
+    def render_alert_tip(congestion, vehicles):
+        alert = check_emergency(congestion, vehicles)
         if alert:
-            st.markdown(
+            alert_slot.markdown(
                 f'<div class="alert-box"><div><b>EMERGENCY ALERT</b><br/>{alert}</div></div>',
-                unsafe_allow_html=True,
-            )
+                unsafe_allow_html=True)
         else:
-            st.markdown(
+            alert_slot.markdown(
                 '<div class="alert-box info"><div><b>All Clear</b><br/>'
                 'No incidents detected. System operating normally.</div></div>',
-                unsafe_allow_html=True,
-            )
-    with tip_col:
-        st.markdown(
+                unsafe_allow_html=True)
+        tip_slot.markdown(
             f'<div class="section-title">AI Recommendation</div>'
             f'<div class="ai-tip">{get_ai_tip(congestion, vehicles)}</div>',
-            unsafe_allow_html=True,
-        )
+            unsafe_allow_html=True)
 
+    # ── Initial render ─────────────────────────────────────────────────────────
+    render_metric(slot_v, "Vehicles Detected", "0",    "active now", "cyan")
+    render_metric(slot_c, "Congestion Level",  "Low",  "real-time",  "green")
+    render_metric(slot_d, "Signal Decision",   "Green Light", "AI control", "green")
+    render_metric(slot_p, "Next Prediction",   "0 veh", "forecast",  "blue")
+    feed_slot.markdown(
+        '<div style="background:#041428;border:1px solid #0d3a5c;border-radius:12px;'
+        'height:260px;display:flex;align-items:center;justify-content:center;'
+        'color:#4a7fa5;font-family:Orbitron,sans-serif;font-size:.75rem;'
+        'letter-spacing:.15em">FEED INACTIVE — TOGGLE TO START</div>',
+        unsafe_allow_html=True)
+    render_chart_slot(history)
+    render_alert_tip("Low", 0)
+
+    # ── Live loop ──────────────────────────────────────────────────────────────
     if run:
-        time.sleep(1)
-        st.rerun()
+        cap = cv2.VideoCapture(str(VIDEO_PATH))
+        if not cap.isOpened():
+            st.error("Could not open video file.")
+        else:
+            feed_slot.markdown('<div class="section-title">Live Camera Feed</div>', unsafe_allow_html=True)
+            frame_slot = feed_slot.empty()
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
+
+                frame, vehicle_count, _ = detector.detect(frame)
+                congestion = engine.analyze(vehicle_count)
+                decision   = engine.signal_decision(congestion)
+                history.append(vehicle_count)
+                if len(history) > 30:
+                    history.pop(0)
+                prediction = predictor.predict(history)
+                st.session_state.history = history
+
+                cc = congestion_color(congestion)
+                sc = signal_color(decision)
+
+                frame_slot.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), use_container_width=True)
+                render_metric(slot_v, "Vehicles Detected", str(vehicle_count), "active now", "cyan")
+                render_metric(slot_c, "Congestion Level",  congestion, "real-time", cc)
+                render_metric(slot_d, "Signal Decision",   decision,   "AI control", sc)
+                render_metric(slot_p, "Next Prediction",   str(prediction)+" veh", "forecast", "blue")
+                render_chart_slot(history)
+                render_alert_tip(congestion, vehicle_count)
+
+            cap.release()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
